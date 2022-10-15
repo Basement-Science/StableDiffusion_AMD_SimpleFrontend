@@ -10,7 +10,7 @@ Supports text2image only. Untested on operating systems other than Windows.
 - Can be aborted at any time.
 
 ## How to set up
-1. Follow instructions to generate your first image using the [harishanand95](https://github.com/harishanand95/diffusers.git) model. See for example [this guide](https://gitgudblog.vercel.app/posts/stable-diffusion-amd-win10).
+1. Follow instructions to generate your first image using the [harishanand95](https://github.com/harishanand95/diffusers/tree/dml) model. See for example [this guide](https://gitgudblog.vercel.app/posts/stable-diffusion-amd-win10).
 2. If you ran into any problems, resolve them now. 
 3. Download this repository as zip, and copy `simpleFrontend.py` and `dml_onnx_SF.py` from this repository to your `diffusers\examples\inference` folder. <br>
 If you prefer to use `git clone`, you could clone this repo into another folder and symlink the script files over.
