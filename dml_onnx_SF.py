@@ -48,6 +48,7 @@ class StableDiffusionPipeline(DiffusionPipeline):
         generator: Optional[torch.Generator] = None,
         latents: Optional[torch.FloatTensor] = None,
         output_type: Optional[str] = "pil",
+        onnxPath="onnx/",
         **kwargs,
     ):
         if "torch_device" in kwargs:
@@ -70,10 +71,10 @@ class StableDiffusionPipeline(DiffusionPipeline):
             import onnxruntime as ort
             so = ort.SessionOptions()
             so.enable_mem_pattern=False
-            unet_sess = ort.InferenceSession("onnx/unet.onnx", so, providers=[ep])
-            post_quant_conv_sess = ort.InferenceSession("onnx/post_quant_conv.onnx", so, providers=[ep])
-            decoder_sess = ort.InferenceSession("onnx/decoder.onnx", so, providers=[ep])
-            encoder_sess = ort.InferenceSession("onnx/encoder.onnx", so, providers=[ep])
+            unet_sess = ort.InferenceSession(onnxPath + "unet.onnx", so, providers=[ep])
+            post_quant_conv_sess = ort.InferenceSession(onnxPath + "post_quant_conv.onnx", so, providers=[ep])
+            decoder_sess = ort.InferenceSession(onnxPath + "decoder.onnx", so, providers=[ep])
+            encoder_sess = ort.InferenceSession(onnxPath + "encoder.onnx", so, providers=[ep])
 
         if isinstance(prompt, str):
             batch_size = 1

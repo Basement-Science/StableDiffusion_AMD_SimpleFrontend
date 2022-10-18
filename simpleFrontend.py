@@ -15,27 +15,45 @@ models = { # dictionary of short display names for diffusion models
 # ########################################################################################## #
     
 class ModelSettings:
-    def INVALID(): return ModelSettings(width = -1, height = -1)
+    def INVALID(): return ModelSettings(width = -1, height = -1, model = "INVALID", persistent = False)
     
     def __init__(self, 
         width: Optional[int] = 512,
         height: Optional[int] = 512,
-        model: Optional[str] = list(models.keys())[0] # first key entry in models
+        model: Optional[str] = list(models.keys())[0], # first key entry in models
+        persistent: bool = False
     ):
         self.width = width
         self.height = height
         if not model in models.keys():
             raise ValueError("unknown model was specified.")
         self.model = model
-        self.storedInPath = "onnx/"
-        self.fileChecksum = "INVALID"
+        self.persistent = persistent
+        if self.persistent:
+            self.storedInPath = f"onnx_{self.model}_{self.width}x{self.height}/"
+        else: 
+            self.storedInPath = "onnx/"
+        self.fileChecksum = "INVALID" # supposed to be calculated after Model was generated
+        self.onnx_version = "yes" # todo: initialize with current version
+    # end __init__
         
     # define equality
     def __eq__(self, other):
-        return self.width == other.width and self.height == other.height and self.model == other.model and self.storedInPath == other.storedInPath and self.fileChecksum == other.fileChecksum
+        # todo: add ONNX version comparison
+        return self.width == other.width and self.height == other.height and self.model == other.model and self.onnx_version == other.onnx_version
+            # and self.storedInPath == other.storedInPath
         
     def __ne__(self, other):
         return not self.__eq__(other)
+        
+    def compareChecksums(self, other):
+        if self.fileChecksum == "INVALID":
+            print("generating checksum for Model in " + self.storedInPath)
+            print("Checksum is: " + str(self.generateModelChecksum()))
+        if other.fileChecksum == "INVALID":
+            print("generating checksum for Model in " + other.storedInPath)
+            print("Checksum is: " + str(other.generateModelChecksum()))
+        return self.fileChecksum == other.fileChecksum
         
     def generateModelChecksum(self):
         hashAlgo = hashlib.sha256()
@@ -58,10 +76,10 @@ class ModelSettings:
                     # add every file and file path to the hash
                     hashAlgo.update(bytes)
                 hashAlgo.update(filePath.encode('utf-8'))
-        
         print()
         self.fileChecksum = hashAlgo.hexdigest()
         return self.fileChecksum
+    # end generateModelChecksum
 # end class
 
 class simpleFrontend:
@@ -84,21 +102,28 @@ class simpleFrontend:
         imageNumber += 1
     # end createImage
     
-    def __init__(self, model_settings: ModelSettings):
-        self.modelSettings = model_settings
+    def __init__(self, model_settings: ModelSettings, verifyChecksums: bool = False):
+        modelNeedsToBeCompiled = True
+        print("Listing all known models: ")
+        for existingModel in storedModelsList:
+            print(existingModel.storedInPath)
+            try:
+                if existingModel == model_settings and (not verifyChecksums or existingModel.compareChecksums(model_settings)):
+                    self.modelSettings = existingModel
+                    modelNeedsToBeCompiled = False
+                    break
+            except AttributeError:
+                print("found faulty model Removing from index.")
+                storedModelsList.remove(existingModel) # will get saved to file later in compileModel()
+        if modelNeedsToBeCompiled:
+            self.modelSettings = model_settings
+        
         modelPath = models[self.modelSettings.model]
         self.lms = LMSDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear")
         self.pipe = StableDiffusionPipeline.from_pretrained(modelPath, scheduler=self.lms, use_auth_token=True)
         self.pipe.safety_checker = lambda images, **kwargs: (images, False) # disable nsfw filter - does not seem to work or be necessary.
         
-        print("generating checksum for Model in " + self.modelSettings.storedInPath)
-        print("Checksum is: " + str(self.modelSettings.generateModelChecksum()))
-        
-        try:
-            if (currentModelState != self.modelSettings):
-                self.compileModel()
-        except AttributeError:
-            print("Current model seems to be faulty.")
+        if modelNeedsToBeCompiled:
             self.compileModel()
     # end __init__
     
@@ -113,8 +138,9 @@ class simpleFrontend:
         
         print("generating checksum for Model in " + self.modelSettings.storedInPath)
         print("Checksum is: " + str(self.modelSettings.generateModelChecksum()))
-        with open(modelStateFileName, "wb") as saveFile:
-            pickle.dump(self.modelSettings, saveFile)
+        with open(modelListFileName, "wb") as saveFile:
+            storedModelsList.append(self.modelSettings)
+            pickle.dump(storedModelsList, saveFile)
     # end compileModel
 # end class
 
@@ -123,8 +149,8 @@ saveFileName = "saveState.pickle"
 imageNumber = 1
 runCount = 1
 logFileName = "output.log"
-modelStateFileName = "modelSettings.pickle"
-currentModelState = ModelSettings.INVALID()
+modelListFileName = "modelList.pickle"
+storedModelsList = []
 try:
     saveFile = open(saveFileName, "rb")
     imageNumber = pickle.load(saveFile)
@@ -138,8 +164,8 @@ except (OSError, IOError, EOFError) as e: # file does not exist / is not accessi
     pickle.dump(imageNumber, saveFile)
 
 try:
-    modelStateFile = open(modelStateFileName, "rb")
-    currentModelState = pickle.load(modelStateFile)
+    modelListFile = open(modelListFileName, "rb")
+    storedModelsList = pickle.load(modelListFile)
 except (OSError, IOError, EOFError) as e: # file does not exist / is not accessible / does not contain as much as expected
     print("current model state could not be determined.")
 
